@@ -1,0 +1,121 @@
+Here, I develop a model to predict whether a given car gets high or low gas mileage based on the \texttt{Auto} data set in the \texttt{ISLR} library.
+
+##Part 1: Creating Binary Response Variable
+I create a binary variable, \texttt{mpg01}, that contains a 1 if \texttt{mpg} contains a value above its median, and a 0 if \texttt{mpg} contains a value below its median. 
+
+```{r}
+library(ISLR)
+auto <- Auto
+
+#compute median
+auto.median <- median(auto$mpg)
+
+#create mpg01 variable by splitting along median value
+auto$mpg01 <- ifelse(auto$mpg > auto.median,1,0)
+
+```
+
+##Part 2: Data Exploration
+
+
+```{r}
+apply(auto,2,class)
+
+#exploring datatypes
+#continuous: mpg; displacement; weight; acceleration
+#discrete: cylinders; year; origin
+#factor: name
+
+pairs(~mpg01+cylinders+displacement+horsepower+weight+acceleration+year+origin+mpg,data=auto)
+boxplot(auto$cylinders~auto$mpg01) #significant as no overlap in quartiles
+boxplot(auto$origin~auto$mpg01) #significant as no overlap in quartiles
+boxplot(auto$year~auto$mpg01) #boxquartiles overlap => less likely to be significant
+boxplot(auto$displacement~auto$mpg01) #significant as no overlap in quartiles
+boxplot(auto$horsepower~auto$mpg01) #significant as no overlap in quartiles
+
+boxplot(auto$weight~auto$mpg01) #significant as no overlap in quartiles
+boxplot(auto$acceleration~auto$mpg01) #box quartiles overlap =>less likely to be significant
+
+
+
+
+
+```
+
+
+(c) Split the data into a training set and a test set.
+
+```{r}
+
+train_size_auto <- floor(0.75 * dim(auto)[1])
+set.seed(4)
+train_ind_auto <- sample(seq_len(nrow(auto)),size=train_size_auto)
+train_set <- auto[train_ind_auto,]
+test_set <- auto[-train_ind_auto,]
+
+```
+
+
+(d) Perform LDA on the training data in order to predict \texttt{mpg01} using the variables that seemed most associated with \texttt{mpg01} in (b). What is the test error of the model obtained?
+
+```{r}
+library(MASS)
+#cylinders, origin, discplacement,weigth
+lda.fit <- lda(mpg01~cylinders+origin+displacement+weight+horsepower,data=train_set)
+plot(lda.fit)
+lda.pred <- predict(lda.fit,test_set)
+lda.error <- sum(test_set$mpg01 != lda.pred$class)/length(test_set$mpg01)
+#test error of LDA model
+lda.error
+
+
+```
+
+(e) Perform QDA on the training data in order to predict \texttt{mpg01} using the variables that seemed most associated with \texttt{mpg01} in (b). What is the test error of the model obtained?
+
+```{r}
+qda.fit <- qda(mpg01~cylinders+origin+displacement+weight+horsepower,data=train_set)
+qda.pred <- predict(qda.fit,test_set)
+qda.error <- sum(test_set$mpg01 != qda.pred$class)/length(test_set$mpg01)
+#test error of QDA model
+qda.error
+```
+
+
+(f) Perform logistic regression on the training data in order to predict \texttt{mpg01} using the variables that seemed most associated with \texttt{mpg01} in (b). What is the test error of the model obtained?
+
+```{r}
+log.fit <- glm(mpg01~cylinders+origin+displacement+weight+horsepower,data=train_set,family=binomial)
+log.prob <- predict(log.fit,test_set,type="response")
+log.bin <- ifelse(log.prob > .5, 1, 0)
+log.error <- (sum(test_set$mpg01 != log.bin))/length(test_set$mpg01)
+#test error of logistic regression model
+log.error
+```
+
+
+(g) Perform $k$-NN on the training data, with several values of $k$, in order to predict \texttt{mpg01}. Use only the variables that seemed most associated with \texttt{mpg01} in (b). What test errors do you obtain? Which value of $k$ seems to perform the best on this data set?
+```{r}
+
+library(FNN)
+
+df.auto <- data.frame(1:200)
+knn.auto <- function(n)
+{
+  x.test <- knn(train_set[,-c(1,6,9,10)],test_set[,-c(1,6,9,10)],train_set$mpg01,k=n)
+  test.set.error <- 1 - sum(test_set$mpg01 == x.test)/183 #test set error
+  result <- data.frame(n,test.set.error)
+  return(result)
+}
+tmp <- sapply(df.auto$X1.200, knn.auto)
+df.knn.final <- data.frame(t(apply(tmp,2,as.numeric)))
+colnames(df.knn.final) <- c("n","test.set.error")
+
+#plot shows test errors (y axis) against increasing k (x axis)
+plot(df.knn.final$test.set.error~df.knn.final$n)
+#Test errors vary in a small range between 0.500 and 0.535
+#range with most consistently low values of test error, though small, is from k=4:8.
+#It is possible that, with such small k, the low error rate is due to chance. Alternatively
+#, another range of consistently low values is from 45:70
+
+```
