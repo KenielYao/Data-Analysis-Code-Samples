@@ -1,0 +1,134 @@
+# Problem 3 (20 points)
+
+In a bike sharing system the process of obtaining membership, rental, and bike return is automated via a network of kiosk locations throughout a city. In this problem, you will try to combine historical usage patterns with weather data to forecast bike rental demand in the Capital Bikeshare program in Washington, D.C.
+
+You are provided hourly rental data collected from the Capital Bikeshare system spanning two years. The file \texttt{train.txt}, as the training set, contains data for the first 19 days of each month, while \texttt{test.txt}, as the test set, contains data from the 20th to the end of the month. The dataset includes the following information:
+\begin{itemize}
+  \item \texttt{daylabel} - day number ranging from 1 to 731
+  \item \texttt{year}, \texttt{month}, \texttt{day}, \texttt{hour} - hourly date
+  \item \texttt{season} - 1 = spring, 2 = summer, 3 = fall, 4 = winter
+  \item \texttt{holiday} - whether the day is considered a holiday
+  \item \texttt{workingday} - whether the day is neither a weekend nor a holiday
+  \item \texttt{weather} - 1 = clear, few clouds, partly cloudy \\ 2 = mist + cloudy, mist + broken clouds, mist + few clouds, mist \\ 3 = light snow, light rain + thunderstorm + scattered clouds, light rain + scattered clouds \\ 4 = heavy rain + ice pallets + thunderstorm + mist, snow + fog
+  \item \texttt{temp} - temperature in Celsius
+  \item \texttt{atemp} - `feels like' temperature in Celsius
+  \item \texttt{humidity} - relative humidity
+  \item \texttt{windspeed} - wind speed
+  \item \texttt{count} - number of total rentals
+\end{itemize}
+Predictions are evaluated using the root mean squared logarithmic error (RMSLE), calculated as
+$$
+\sqrt{\frac{1}{n}\sum_{i=1}^n(\log(m_i+1)-\log(\hat{m}_i+1))^2}
+$$
+where $m_i$ is the true count, $\hat{m}_i$ is the estimate, and $n$ is the number of entries to be evaluated.
+
+## Part a
+
+For the purpose of evaluating your models, divide the training set into two parts: first 15 days of each month as your new training set and 16th to 19th as your validation set. Using this new training set, fit a linear model on the \texttt{count} numbers against (a subset of) the time and weather variables. You will first need to transform the \texttt{count} numbers to $\log(\texttt{count} + 1)$. Pick those variables that you think are relevant. Be careful about whether to include them numerically or as factors. You might also want to include any interaction terms that you think are necessary. Report the model that you fit, and report the RMSLE score evaluated on your own validation set.
+```{r}
+#divide training set and transform/delete variables
+bikeshare.train <- read.table("train.txt", header=TRUE)
+bikeshare.train$count <- log(bikeshare.train$count + 1)
+drops <- c("casual","registered")
+bikeshare.train <- bikeshare.train[,!(names(bikeshare.train) %in% drops)]
+bikeshare.trainset <- bikeshare.train[bikeshare.train$day <= 15,]
+bikeshare.validset <- bikeshare.train[bikeshare.train$day >=16,]
+
+#variables:
+#factor: season; holiday; workingday; weather; month; 
+#numeric: temp; atemp; humidity; windspeed; year; hour;
+
+basic.lm <- lm(count~hour+humidity+factor(month)+year+factor(weather)+windspeed+workingday+
+                 atemp, data=bikeshare.trainset)
+#justification (including by trial and error)
+#month more predictive than season
+#working day more predictive than holiday
+#atemp more predictive than temp
+
+basic.pred <- predict(basic.lm,newdata=bikeshare.validset[,-dim(bikeshare.validset)[2]])
+basic.RMSLE.score <- sqrt(mean((basic.pred - bikeshare.validset$count)^2))
+
+#RMSLE score for basic linear model
+basic.RMSLE.score 
+
+```
+
+
+## Part b
+
+Now keep working on the new training set and take a step further than the linear model. For the transformed \texttt{count} numbers, compute the mean hourly log counts for each day and make scatterplots of the means versus \texttt{daylabel}. To account for this main trend in terms of time, fit local linear regressions to the means against \texttt{daylabel}. After fitting the nonparametric curve, use the hourly residuals as your new responses, and fit the same model as in part (a). Report the score evaluated on the validation set. 
+
+```{r}
+train.daylabel <- unique(bikeshare.trainset$daylabel)
+count.mean <- unlist(lapply(1:length(train.daylabel), function(x) 
+  mean(bikeshare.trainset$count[bikeshare.trainset$daylabel==train.daylabel[x]],na.rm=TRUE)))
+daymean.plot <- data.frame(day=train.daylabel,meancount=count.mean)
+
+#Plot of mean hourly log counts for each day
+plot(daymean.plot$meancount~daymean.plot$day)
+
+```
+
+```{r}
+#fit local linear regression to the mean against daylabel
+loess.model <- loess(meancount~day,data=daymean.plot,span=0.25)
+hourly.residuals <- loess.model$residuals
+hour.residuals <- rep(hourly.residuals,each=24)
+
+#use hourly residual as response to fit model in (a)
+residual.lm <- lm(hour.residuals~hour+humidity+factor(month)+year+factor(weather)+windspeed
+                  +workingday+atemp, data=bikeshare.trainset)
+residual.pred <- predict(residual.lm,newdata=bikeshare.validset)
+
+#calculate real residuals
+valid.daylabel <- unique(bikeshare.validset$daylabel)
+count.mean.valid <- unlist(lapply(1:length(valid.daylabel), function(x) 
+  mean(bikeshare.validset$count[bikeshare.validset$daylabel==valid.daylabel[x]],na.rm=TRUE)))
+validmean.plot <- data.frame(day=valid.daylabel,meancount=count.mean.valid)
+loess.valid <- loess(meancount~day,data=validmean.plot,span=0.25)
+valid.df <- data.frame(daylabel=valid.daylabel,residuals=loess.valid$residuals)
+valid.df2 <- bikeshare.validset[,c("daylabel","count")]
+valid.final <- merge(valid.df2,valid.df,by="daylabel")
+
+residual.RMSLE.score <- sqrt(mean((residual.pred - valid.final$residuals)^2)) 
+
+#RMSLE score for residuals
+residual.RMSLE.score 
+
+```
+
+
+## Part c
+
+Now  be ``more nonparametric'' by fitting an additive model. Include \texttt{daylabel} in your model and treat it, along with other numerical variables such as temperature, nonparametrically. Again, report your model and the score obtained on the validation set. You can fit the additive model by using the \texttt{gam} package in R.
+
+```{r,message=FALSE,warning=FALSE}
+library(gam)
+nonp.gam <- gam(count~lo(hour,span=0.25,degree=2)+lo(humidity,span=0.4)+factor(month)+year+
+                  factor(weather)+lo(windspeed,span=0.5)+workingday+lo(atemp,span=0.3)+lo(daylabel,span=0.25),
+                data=bikeshare.trainset,control = gam.control(surface = "direct"))
+nonp.pred <- predict(nonp.gam,newdata=bikeshare.validset[,-dim(bikeshare.validset)[2]])
+nonp.RMSLE.score <- sqrt(mean((nonp.pred - bikeshare.validset$count)^2))
+
+#RMSLE score for additive model
+nonp.RMSLE.score
+
+```
+
+## Part d
+
+Now, based on the results you obtained for the previous problems, fit a model on the original training set, and predict the total rental counts for each entry in the test set. Record your predicted counts in a file \texttt{assn4-<your netid>.txt} and submit it on Canvas. Your file should contain only one column vector with 6493 entries. We will compute the RMSLE of the predictions, and the points you receive for this part will depend on your relative score. 
+A prize will be offered to the students from the residential college or graduate school having the best average score.
+```{r,warning=FALSE,message=FALSE}
+
+bikeshare.test <- read.table("test.txt",header=TRUE)
+nonp.gam.final <- gam(count~lo(hour,span=0.25,degree=2)+lo(humidity,span=0.4)+factor(month)+year
+                  +factor(weather)+lo(windspeed,span=0.5)+workingday+lo(daylabel,span=0.25),
+                data=bikeshare.train,control = gam.control(surface = "direct"))
+final.pred <- predict(nonp.gam.final,newdata=bikeshare.test)
+write.table(final.pred,"./assn4-kky5.txt",row.names=FALSE,col.names=FALSE)
+
+
+```
+
+
