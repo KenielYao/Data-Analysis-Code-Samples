@@ -1,0 +1,126 @@
+# Problem 2 (20 points)
+
+The data for this problem are daily maximum 8-hour ozone concentrations (in parts-per-billion) at 153 sites in the US midwest near Lake Michigan, for 89 days during the summer of 1987. To get the data in R, install and load the package \texttt{fields} and use the command \texttt{data(ozone2)}. The list \texttt{ozone2} contains
+\begin{itemize}
+  \item \texttt{lon.lat}: longitudes and latitudes of the 153 stations;
+  \item \texttt{y}: measurements at each stations on each day;
+  \item \texttt{station.id} and \texttt{dates}.
+\end{itemize}
+Your task in this problem is to estimate the ozone concentrations of the area on June 18, 1987 using a kernel smoother.
+
+```{r,include=FALSE}
+library(fields)
+data(ozone2)
+```
+
+
+## Part a
+
+Specify a grid on the longitude and the latitude using \texttt{x=seq(-93,-82,.1)} and \texttt{y=seq(40,46,.1)}.
+
+```{r}
+x <- seq(-93,-82,.1)
+y <- seq(40,46,.1)
+grid <- expand.grid(x,y)
+```
+
+
+## Part b 
+
+Write your own code for a $2$-dimensional kernel smoother using a Gaussian kernel with bandwidth $h$. Pick a specific value of $h$, and use your smoother to estimate the ozone concentrations at the grid points.
+
+
+```{r}
+kern_smooth <- function(h, x, y, data){
+  #initialise
+  station.list <- data$lon.lat[!is.na(data$y["870618",]),] #length 147 stations no NA
+  tmp.kernel <- numeric(dim(station.list)[1])
+  tmp.prod.kernel <- numeric(dim(station.list)[1])
+  yreal.list <- data$y["870618",] #choose only June 18th Ozone values
+  yreal.list <- yreal.list[!is.na(yreal.list)]
+  
+  for (i in 1:dim(station.list)[1]){
+    tmp.kernel[i] <- (1/sqrt(2*pi*h^2))*exp(-((station.list[i,1]-x)^2+
+                                          (station.list[i,2]-y)^2)
+                                         /(2*h^2)) 
+    tmp.prod.kernel[i] <- tmp.kernel[i]*yreal.list[i]
+  }
+  
+  num <- sum(tmp.prod.kernel)
+  den <- sum(tmp.kernel)
+  num/den
+}  
+
+#populate grid
+grid$m <- NA
+for (i in 1:dim(grid)[1]){
+  grid$m[i] <- kern_smooth(2,grid$Var1[i],grid$Var2[i],ozone2)
+}
+
+
+```
+
+
+## Part c
+
+Perform cross validation to choose the bandwidth $h$. Use the leave-one-out method from Problem 1. Plot the cross validation scores against the bandwidths. What value of the bandwidth will you use? Explain.
+```{r}
+#initialise
+h <- seq(0.1,10,.1)
+station.list <- ozone2$lon.lat[!is.na(ozone2$y["870618",]),] #length 147 stations no NA
+yreal.list <- ozone2$y["870618",]
+yreal.list <- yreal.list[!is.na(yreal.list)]
+cv.full <- array(0,dim=c(length(h),dim(station.list)[1],4))
+
+
+for (i in 1:length(h)) {
+  bandwidth <- h[i]
+  for (j in 1:dim(station.list)[1]) {
+    #assume global h
+    tmp.kernel <- numeric(dim(station.list)[1])
+    tmp.prod.kernel <- numeric(dim(station.list)[1])
+    for (k in 1:dim(station.list)[1]) {
+      #calculate kernel weight for each station
+      tmp.kernel[k] <- (1/sqrt(2*pi*bandwidth^2))*exp(-((station.list[k,1]-station.list[j,1])^2+
+                                          (station.list[k,2]-station.list[j,2])^2)
+                                         /(2*bandwidth^2))
+      #calculate weighted ozone value for each station
+      tmp.prod.kernel[k] <- tmp.kernel[k]*yreal.list[k]
+    }
+    #total weight
+    kernel.sum <- sum(tmp.kernel,na.rm=TRUE)
+    Lii <- tmp.kernel[j]/kernel.sum
+    y_hat <- sum(tmp.prod.kernel,na.rm=TRUE)/kernel.sum #include all
+    score <- ((yreal.list[j]-y_hat)/(1-Lii))^2
+    cv.full[i,j,1] <- station.list[j,1]
+    cv.full[i,j,2] <- station.list[j,2]
+    cv.full[i,j,3] <- yreal.list[j]
+    cv.full[i,j,4] <- score
+  }
+}
+risk <- unlist(lapply(1:length(h),function(x) mean(cv.full[x,,4])))
+plot.frame <- data.frame(h=h,risk=risk)
+#risk of x < 1.0 too large to be useful
+plot.frame <- plot.frame[11:150,]
+plot(y=plot.frame$risk,x=plot.frame$h)
+#use h=0.4 as it produces the lowest cross validation score. All h values below 0.4 are NaN
+
+
+```
+
+
+## Part d
+
+Suppose $z$ is the matrix of size \texttt{length(x)} by \texttt{length(y)} containing your kernel smoothing estimates at the grid points. Visualize your estimate as a heatmap on a regional map by using the following command in R: \texttt{image.plot(x, y, z, col=rainbow(128,alpha=.5))}, \texttt{US(add=T, lwd=2, col=1)}.
+```{r}
+z.fill <- vector('numeric')
+for (i in 1:(length(x)*length(y))){
+  z.fill[i] <- kern_smooth(0.4,grid$Var1[i],grid$Var2[i],ozone2)
+}
+z <- matrix(z.fill, nrow = length(x), ncol = length(y))
+
+image.plot(x,y,z,col=rainbow(128,alpha=.5))
+US(add=T,lwd=2,col=1)
+
+
+```
