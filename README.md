@@ -1,6 +1,3 @@
-Data-Science-Code-Samples
-A sample of data analysis projects with machine learning
-
 bike_rental_forecast: Forecasting bike rental demand in the Capital Bikeshare program in Washington, D.C. using linear, local linear, and additive models
 
 fuel_efficiency_classification: classifying cars into high or low gas mileage with LDA, QDA, logistic regression and knn
