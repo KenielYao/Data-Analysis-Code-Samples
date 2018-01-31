@@ -1,4 +1,4 @@
-# Data-Science-Code-Samples
+Data-Science-Code-Samples
 A sample of data analysis projects with machine learning
 
 bike_rental_forecast: Forecasting bike rental demand in the Capital Bikeshare program in Washington, D.C. using linear, local linear, and additive models
@@ -9,5 +9,5 @@ ozone_concentration_estimation: Estimating ozone concentrations on a given date 
 
 spam_classification: Imputing missing data and classifying spam with knn regression and classification, and logistic classification
 
-topic_model_exploration: exploring the capabilities of the text2vec package in R
+topic_model_exploration: Exploring the capabilities of the text2vec package in R
 
