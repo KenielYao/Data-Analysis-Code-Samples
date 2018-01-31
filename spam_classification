@@ -1,0 +1,173 @@
+## Background
+
+The dataset consists of a collection of 57 features relating to about 4,600 
+emails and a label of whether or not the email is considered spam, already pre-
+divided into a training and test set. This code builds effective spam classification
+rules using the given predictors with knn regression and classification.
+
+### A note about the features
+
+The column names (in the first row of each .csv file) are fairly self-explanatory.
+
+* Some variables are named `word_freq_(word)`, indicating a calculation of 
+the frequency of how many times a specific word appears in the email, expressed
+as a percentage of total words in the email multiplied by 100.
+
+* Some variables are named `char_freq_(number)`, a count of the
+frequency of the character, expressed as a percentage of total 
+characters in the email multiplied by 100. Note, these characters are
+not valid column names in R, but you can view them in the raw 
+.csv file. 
+
+* Some variables are named `capital_run_length_(number)` and have
+information about the average (or maximum length of, or total) consecutive capital 
+letters in the email.
+
+* `spam`: This is the response variable, 0 = not spam, 1 = spam.
+
+##Part 1: Missing Values
+Unfortunately, the `capital_run_length_average` variable is corrupted and as a
+result, contains a fair number of missing values. I use k-nearest-neighbors 
+regression to impute the missing values in the given column using the other predictors.
+
+```{r}
+#import data
+spam_test <- read.csv("spam_test.csv")
+spam_train <- read.csv("spam_train.csv")
+
+library(FNN)
+
+#merge datasets
+spam_test$spam <- NA
+new <- rbind(spam_test, spam_train)
+
+#standardise data except spam, capital_run_length_average
+new[,c(1:54,56:57)] <- scale(new[,c(1:54,56:57)],center=TRUE,scale=TRUE)
+spam_test_sd <- new[is.na(new$spam),]
+spam_train_sd <- new[!is.na(new$spam),]
+spam_train_x <- spam_train_sd[is.na(spam_train_sd$capital_run_length_average),]
+spam_train_y <- spam_train_sd[!is.na(spam_train_sd$capital_run_length_average),]
+
+#impute on training set with k=15 (found by cross-validation)
+spam_train_x.list <- knn(spam_train_y[,-c(55,58)],spam_train_x[,-c(55,58)],
+                         spam_train_y$capital_run_length_average,k=15)
+spam_test_sd.list <- knn(spam_train_y[,-c(55,58)],spam_test_sd[,-c(55,58)],
+                         spam_train_y$capital_run_length_average,k=15)
+
+#recreate datasets: a) spam_test_final, b) spam_train_final
+spam_test_sd$capital_run_length_average <- spam_test_sd.list
+spam_test_final <- spam_test_sd[,-58]
+spam_test_final <- data.frame(apply(spam_test_final,2,as.numeric))
+
+spam_train_x$capital_run_length_average <- spam_train_x.list
+spam_train_x <- data.frame(apply(spam_train_x,2,as.numeric))
+spam_train_y <- data.frame(apply(spam_train_y,2,as.numeric))
+spam_train_final <- rbind(spam_train_x,spam_train_y)
+
+```
+
+##Part 2: knn Spam Classification Function
+I create a function that performs knn classification, automatically splitting
+training data into a sub-training and validation set to select optimal $k$.
+
+```{r, eval=TRUE}
+
+knnclass <- function(xtrain, xtest, ytrain) #ytrain=response variable
+{
+  mean_val <- apply(xtrain,2,mean) #vector of means
+  mean_sd <- apply(xtrain,2,sd) #vector of std dev
+  
+  #standardise variables
+  xtrain_sd <- sweep(xtrain,2,mean_val)
+  xtrain_sd <- sweep(xtrain_sd,2,mean_sd,"/")
+  xtest_sd <- sweep(xtest,2,mean_val)
+  xtest_sd <- sweep(xtest_sd,2,mean_sd,"/")
+  
+  #create train subset, and validation set
+  train_size <- floor(0.8 * dim(xtrain_sd)[1])
+  set.seed(123)
+  train_ind <- sample(seq_len(nrow(xtrain_sd)),size=train_size)
+  xtrain_train <- xtrain_sd[train_ind,]
+  xtrain_validate <- xtrain_sd[-train_ind,]
+  xtrain_train_y <- ytrain[train_ind]
+  xtrain_validate_y <- ytrain[-train_ind]
+
+  #create set of k using floor(2^r) with 0 =< r =< 11.5
+  upper_lim <- floor(log(dim(xtrain_train)[1])/log(2))
+  r <- c(seq(0,upper_lim, by=0.5)) 
+  df.knn <- data.frame(r)
+  df.knn$k <- 2^(df.knn$r)
+  df.knn$k_floor <- floor(df.knn$k) +1
+  
+  #function to calculate error values for given k
+  knn.f <- function(k_floor)
+  {
+    xtrain_validate.list <- knn(xtrain_train,xtrain_validate,
+                           xtrain_train_y,k_floor)
+    error <- sum(xtrain_validate_y != xtrain_validate.list)/length(xtrain_validate_y)
+    result <- data.frame(k_floor,error)
+    return(result)
+  }
+  
+  #apply function to find best_k by minimising mse.error
+  df.tmp <- sapply(df.knn$k_floor, knn.f)
+  df.tmp <- data.frame(t(df.tmp))
+  df.knn <- merge(df.knn,df.tmp,by="k_floor")
+  df.knn$error <- as.numeric(df.knn$error)
+
+  #find best_k
+  best_k <- df.knn$k_floor[df.knn$error==min(df.knn$error)]
+
+  #output results using best_k
+  xtrain_validate.final <- knn(xtrain_sd,xtest_sd,
+                               ytrain,best_k[1])
+  
+  return(xtrain_validate.final)
+  
+}
+```
+
+
+##Part 3: Evaluating Classification Results
+I fit 4 models and produce 4 sets of predictions of `spam` on the test set:
+
+1. `knn_pred1`: `knnclass()` using all predictors except for `capital_run_length_average` 
+(to test if the imputation approach was accurate). 
+
+2. `knn_pred2`: `knnclass()` using all predictors including `capital_run_length_average` with
+the imputed values. 
+
+3. `logm_pred1`: logistic regression using all predictors except for `capital_run_length_average`.
+
+4. `logm_pred2`: logistic regression using all predictors including `capital_run_length_average` 
+with the imputed values. 
+
+```{r}
+#1. knn class without capital_run_length_average
+knn_pred1 <- knnclass(spam_train_final[,-c(55,58)],spam_test_final[,-55],spam_train_final[,58])
+
+#2. knn class with capital_run_length_average
+knn_pred2 <- knnclass(spam_train_final[,-58],spam_test_final,spam_train_final[,58])
+
+#3. Logistic Regression without capital_run_length_average
+logm_fit1 <- glm(spam~.,data=spam_train_final[,-c(55)],family=binomial)
+logm_prob1 <- predict(logm_fit1,spam_test_final[,-55],type="response")
+logm_pred1 <- ifelse(logm_prob1 > .5,1,0)
+
+#4. Logistic Regression with capital_run_length_average
+logm_fit2 <- glm(spam~.,data=spam_train_final,family=binomial)
+logm_prob2 <- predict(logm_fit1,spam_test_final,type="response")
+logm_pred2 <- ifelse(logm_prob2 > .5,1,0)
+
+summary(logm_fit2)
+```
+#Sample evaluation for `logm_fit2`
+
+Several fairly significant coefficients including for words "our", "your","free", and "business"
+indicate that a significant portion of spam emails are sales related. Again, "$" and "!" signs 
+have positive coefficients with strong significance indicating prominance of sales and 
+excitement. Surprisingly capital_run_length_longest and not average is more significant. 
+Additionally, "credit", "address" and "money" are not significant indicating the relative
+scarcity of money-scamming emails.
+
+
