@@ -1,15 +1,20 @@
 
-Capital Bikeshare automates the process of obtaining membership, rental, and bike return via a network of kiosk locations throughout a city. Here, I combine historical usage patterns with weather data to forecast the company's bike rental demand in Washington, D.C.
+Capital Bikeshare automates the process of obtaining membership, rental, and bike return via a network of kiosk locations throughout a
+city. Here, I combine historical usage patterns with weather data to forecast the company's bike rental demand in Washington, D.C.
 
 I use hourly data spanning two years (available online at https://www.capitalbikeshare.com/system-data).
-You are provided hourly rental data collected from the Capital Bikeshare system spanning two years. The file \texttt{train.txt}, as the training set, contains data for the first 19 days of each month, while \texttt{test.txt}, as the test set, contains data from the 20th to the end of the month. The dataset includes the following information:
+You are provided hourly rental data collected from the Capital Bikeshare system spanning two years. The file \texttt{train.txt}, as the
+training set, contains data for the first 19 days of each month, while \texttt{test.txt}, as the test set, contains data from the 20th 
+to the end of the month. The dataset includes the following information:
   \begin{itemize}
 \item \texttt{daylabel} - day number ranging from 1 to 731
 \item \texttt{year}, \texttt{month}, \texttt{day}, \texttt{hour} - hourly date
 \item \texttt{season} - 1 = spring, 2 = summer, 3 = fall, 4 = winter
 \item \texttt{holiday} - whether the day is considered a holiday
 \item \texttt{workingday} - whether the day is neither a weekend nor a holiday
-\item \texttt{weather} - 1 = clear, few clouds, partly cloudy \\ 2 = mist + cloudy, mist + broken clouds, mist + few clouds, mist \\ 3 = light snow, light rain + thunderstorm + scattered clouds, light rain + scattered clouds \\ 4 = heavy rain + ice pallets + thunderstorm + mist, snow + fog
+\item \texttt{weather} - 1 = clear, few clouds, partly cloudy \\ 2 = mist + cloudy, mist + broken clouds, mist + few clouds, mist 
+  \\ 3 = light snow, light rain + thunderstorm + scattered clouds, light rain + scattered clouds 
+  \\ 4 = heavy rain + ice pallets + thunderstorm + mist, snow + fog
 \item \texttt{temp} - temperature in Celsius
 \item \texttt{atemp} - 'feels like' temperature in Celsius
 \item \texttt{humidity} - relative humidity
@@ -21,7 +26,8 @@ I evaluate predictions using the root mean squared logarithmic error (RMSLE), ca
 $$
 \sqrt{\frac{1}{n}\sum_{i=1}^n(\log(m_i+1)-\log(\hat{m}_i+1))^2}
 $$
-where $m_i$ is the true count, $\hat{m}_i$ is the estimate, and $n$ is the number of entries to be evaluated. The RMSLE is useful to prevent over-weighting the effect of large observations over small observations, given same magnitude of error.
+where $m_i$ is the true count, $\hat{m}_i$ is the estimate, and $n$ is the number of entries to be evaluated. The RMSLE is useful 
+to prevent over-weighting the effect of large observations over small observations, given same magnitude of error.
 
 ## Part a: Linear Model
 
@@ -73,7 +79,8 @@ daymean.plot <- data.frame(day=train.daylabel,meancount=count.mean)
 plot(daymean.plot$meancount~daymean.plot$day)
 
 ```
-As this trend is non-linear, I take a step beyond the linear model to fit local linear regressions to the means against \texttt{daylabel}.
+As this trend is non-linear, I take a step beyond the linear model to fit local linear regressions to the means against 
+\texttt{daylabel}.
 After fitting the nonparametric curve, I use the hourly residuals as my new response variable, and fit the same model as in part (a). 
 
 
@@ -123,4 +130,5 @@ nonp.RMSLE.score
 
 ```
 
-As seen above, the additional tuning capabilities offered by the additive model allows us to decrease the RMSLE score significantly, for both training and test errors. 
+As seen above, the additional tuning capabilities offered by the additive model allows us to decrease the RMSLE score significantly, 
+for both training and test errors. 
