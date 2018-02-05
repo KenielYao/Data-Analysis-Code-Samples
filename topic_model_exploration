@@ -1,11 +1,13 @@
-# 2. Topic modeling of CrossValidated (50 points)
+Topic Modelling with text2vec in R
 
-Our data were taken from the December 15, 2016 Stack Exchange data dump\footnote{Licensed under Creative Commons Share Alike 3.0, https://creativecommons.org/licenses/by-sa/3.0/}. You will find two files
+This data was taken from the December 15, 2016 Stack Exchange data dump\footnote{Licensed under Creative Commons Share Alike 3.0, 
+https://creativecommons.org/licenses/by-sa/3.0/}. It includes two files:
 \begin{align*}
 &\texttt{stackexchange/20161215StatsPostsRaw.csv} \\
 &\texttt{stackexchange/20161215StatsPostsMerged.csv}
 \end{align*}
-The cleaned file has 92,335 documents, created by combining questions and associated answers, then removing HTML, \LaTeX, code, and stopwords. See the \texttt{README} file for further details. 
+The cleaned file has 92,335 documents, created by combining questions and associated answers, then removing HTML, \LaTeX, code, and
+stopwords. See the \texttt{README} file for further details. 
 
 \noindent
 Here is part of an entry from the cleaned up version of the collection:
@@ -21,9 +23,11 @@ Here is part of an entry from the cleaned up version of the collection:
 &\texttt{to be a bit dense as an introduction. [...]}
 \end{align*}
 
-## Part a
+## Part a: Vocabulary Processing
 
-Process the data to determine a word vocabulary. You should get a vocabulary of size around 10,000 words or so??-it's up to you to decide. Describe the steps you take to process the data and the criteria you use to select the vocabulary.
+First, I clean and process the data to determine a word vocabulary of size ~10,000 by requiring the minimum frequency of a word to be 45
+in the corpus.
+
 
 ```{r, message=FALSE,warning=FALSE, eval=FALSE}
 #import data
@@ -48,7 +52,7 @@ tokens <- merged.post$CleanBody %>%
   tok_fun
 it <- itoken(tokens, ids = merged.post$Id, progressbar = FALSE)
 
-#vocabulary
+#create vocabulary
 v <- create_vocabulary(it, stopwords = stopwords) %>%
   prune_vocabulary(term_count_min = 45)
 #only keep words that are of length above 2
@@ -63,13 +67,10 @@ dtm <- create_dtm(it, vectorizer)
 ```
 
 
-## Part b
+## Part b: Fitting Topic Models
 
-Now fit topic models on the collection. Divide the corpus into training and validation documents?Cuse a 90\%/10\% split, holding out about 9,000 documents. You will need to write a parser that maps each entry to a sequence of word-id/count pairs. You may use the LDA implementation in the library \texttt{topicmodels} or any other R library that you wish. The following resources may be helpful:
-\begin{align*}
-&\texttt{https://goo.gl/6xLoky} \\
-&\texttt{http://tidytextmining.com/topicmodeling.html}
-\end{align*}
+Now I fit topic models on the collection. First, I divide the corpus into training and validation documents with a 90:10 split, holding
+out about 9,000 documents. 
 
 ```{r, message=FALSE,warning=FALSE}
 #split into training and validation documents
@@ -82,8 +83,8 @@ test.set <- dtm[-doc.split,]
 
 ```
 
-
-Train topic models using different numbers of topics; a good starting point would be around 30 topics. Display the top 10 or so words (in decreasing order of probability $\beta_{kw}$) in each topic. Comment on the ``meaning" or interpretation of several of the topics.
+Next, I train topic models, using different number of topics. As a larger number of topics leads to greater specificity but often less
+interpretability, I eventually settled on 30 topics. 
 
 ```{r, message=FALSE,warning=FALSE, eval=FALSE}
 lda_model <- LDA$new(n_topics = 30, doc_topic_prior = 0.1, topic_word_prior = 0.01)
@@ -93,7 +94,7 @@ train_topic_dist <-
                           progressbar = FALSE)
 ```
 
-Display the top 10 words of each topic in decreasing order of probability:
+Below are the top 10 words of each topic in decreasing order of probability:
 
 ```{r}
 top_10_words <- lda_model$get_top_words(n = 10, topic_number = c(1:30), lambda = 1)
@@ -101,7 +102,7 @@ top_10_words
 
 ```
 
-Interpreting a few topics:
+I offer an interpretation of a few of the topics above. 
 Topic 4 seems highly related to PCA and linear algebra applications, given the prevalence of "matrix", "PCA" and "components"
 Topic 5 seems to be related to survival analysis
 Topic 6 seems related to Markov Chains
@@ -110,7 +111,9 @@ It seems that the top 10 words in each topic feature a lot of similar word roots
 within each topic. It would be useful to see phrases used together e.g. "Markov Chain" instead of "Markov" and "Chain"
 
 \noindent
-Select several documents, and display the most probable topics for each of them (according to the posterior distribution over $\theta$). Do the assigned topics make sense? Comment on your findings.
+I have selected several documents from the corpus below, and display barplots of their most probable topics, using their posterior
+distribution. I provide a few comparisons below by manually reading the actual document, in relation to my categorisation of its topic as above.
+
 
 ```{r}
 doc.plot <- function(doc_no) {
@@ -126,8 +129,8 @@ doc.plot(1)
 ```
 
 Document 1 is largely composed of topic 13, 6, 24, and 26. 
-Looking at the top 30 words in each topic, topic 13 is related to probability theory, 6 with regression, 24 with survival analysis, and 26 with clustering. 
-Looking at the document itself, these are fairly relevant as it questions how to model an infinite Poisson arrival process. 
+Looking at the top 30 words in each topic, topic 13 is related to probability theory, 6 with regression, 24 with survival analysis, and
+26 with clustering. Looking at the document itself, these are fairly relevant as it questions how to model an infinite Poisson arrival process. 
 
 
 ```{r}
@@ -135,7 +138,8 @@ doc.plot(2)
 ```
 
 Topic 20 is focused on classification (particularly trees), while 3 and 25 are focused on hypothesis testing and medical topics.
-Document 2 in the training set is related to ROBPCA detection in non-normal multivariate data. While highly focused on regression methods, which may share words with classification, the other two topics do not seem too relevant.
+Document 2 in the training set is related to ROBPCA detection in non-normal multivariate data. While highly focused on regression
+methods, which may share words with classification, the other two topics do not seem too relevant.
 
 ```{r}
 doc.plot(3)
@@ -143,46 +147,32 @@ doc.plot(3)
 This document is very specific with a focus on Topic 26, clustering.
 The document text itself is short and solely focused on conditional probability.
 
-Overall, from these results, it seems that while the heavily featured topics in documents
-have some line of connection to the document itself, they are not clearly related. This may be due in part to the number of topics, 30, which may be too large for easy human interpretation.
+Overall, from these results, it seems that while the heavily featured topics in documents have some line of connection to the document
+itself, they are not clearly related. This may be due in part to the number of topics, 30, which may be too large for easy human
+interpretation.
 
-\noindent
-You will need to read the documentation for the implementation that you choose (mllib or ml), to learn how to carry out these steps.
+## Part c: A comment on perplexity
 
-## Part c
+After the above qualitative inspection, I investigate the models more quantitatively, using perplexity. I explain the theory below:
 
-Now you will investigate how to evaluate the model more quantitatively\footnote{This is a ``concepts" problem. Write up your solution in your R markdown document.} Recall that
-(for a model that is exchangeable at the document level), the perplexity of a model $\theta$ is
-$$
-\text{Perplexity}(\theta) = \left(\prod_D p_\theta(D)\right)^{-1/\sum_D|D|},
-$$
-where $D$ is a test document with $|D|$ words. Explain how this corresponds to the definition
-$$
-\text{Perplexity}(\theta) = \left(\prod_{i=1}^N p_\theta(w_n|w_1,...,w_{n-1})\right)^{-1/N},
-$$
-which is the inverse geometric mean of the predictions.
-
-My explanation:
-|D| is the number of words in each document, so $\sum_D|D|$ is the number of words across all documents which is equivalent to N. 
-We want to maximise $p_\theta(w_n|w_1,...,w_{n-1})$, our predictive power. When we have $-1/\sum_D|D|$ as our exponent, this is equivalent to minimising the total perplexity.
-We know $p_\theta(D)$ is the joint probability of all words in a document, taking the "bag of words" approach i.e. not assuming order.
-$\prod_{i=1}^N p_\theta(w_n|w_1,...,w_{n-1})$ is the joint probability of all words in all documents. 
-$\prod_D p_\theta(D)$ and $\prod_{i=1}^N p_\theta(w_n|w_1,...,w_{n-1})$ are equivalent as we assume that the model is exchangeable at the document level (order of documents doesn't matter), as the documents are independently conditioned on $\theta$.
-Thus as the interior and exponents are equivalent, the two equations provided above are equivalent.
-
-\noindent
-Now, explain (mathematically) how to evaluate the test set perplexity for the latent Dirichlet allocation model. Why is this difficult? Can you propose a computationally efficient approximation?
-
-My answer: 
-As seen above, perplexity is strongly related to the likelihood of (the product of) held-out or unseen documents given: a) the proportions parameters, and b) topic parameter.  
-This requires first conditioning on the latent variables, which requires calculating the posterior of the latent Dirichlet allocation model based on the provided/training documents. Calculating the denominator of the posterior is computationally intractable due to the coupling between $\theta$ and $\beta$ in determining $p_(w|\alpha, \beta)$, thus making finding the log-likelihood and maximising it across the whole distribution computationally imposible. 
-To tackle this, we can introduce a distribution over the latent variables (mean-field variational inference). Given our log probability of observations, we can calculate an evidence lower bound and optimise (increase) it by varying the parameters of the distributions of the latent variables, where there is one parameter for each latent variable. It is the dependence of these parameters in the true model that makes it computationally intractable. By treating them independently and then optimising each while holding the others fixed, we can fit a lower bound close to the true value.
-To do so, we determine the local variables on each document (per-document topic proportions, and per-word topic assignments), and then estimate $\alpha$ and $\beta$ of the model using these statistics. Using the calculated $\alpha$ and $\beta$, we can then maximise the lower bound on the log likelihood of each document, summing them up to get a log-likelihood for $p_(w|\alpha, \beta)$.
+Perplexity is strongly related to the likelihood of (the product of) held-out or unseen documents given: a) the proportions parameters,
+and b) topic parameter.  This requires first conditioning on the latent variables, which requires calculating the posterior of the latent
+Dirichlet allocation model based on the provided/training documents. Calculating the denominator of the posterior is computationally
+intractable due to the coupling between $\theta$ and $\beta$ in determining $p_(w|\alpha, \beta)$, thus making finding the log-likelihood
+and maximising it across the whole distribution computationally impossible. To tackle this, we can introduce a distribution over the
+latent variables (mean-field variational inference). 
+Given our log probability of observations, we can calculate an evidence lower bound and optimise (increase) it by varying the parameters of the distributions of the latent variables, where there is one parameter for each latent variable. It is the dependence of these
+parameters in the true model that makes it computationally intractable. By treating them independently and then optimising each while
+holding the others fixed, we can fit a lower bound close to the true value. To do so, we determine the local variables on each document
+(per-document topic proportions, and per-word topic assignments), and then estimate $\alpha$ and $\beta$ of the model using these
+statistics. Using the calculated $\alpha$ and $\beta$, we can then maximise the lower bound on the log likelihood of each document,
+summing them up to get a log-likelihood for $p_(w|\alpha, \beta)$.
 A big benefit of this method is that it can be used to stochastically optimise massive datasets (stochastic variational inference).
 
-## Part d
+## Part d: Evaluating Test Set Perplexity
 
-Now evaluate the test set perplexity for a range of models, fit with $K = 10,20,...,200$ topics (or an appropriate range of your own choice). Plot the test set perplexity as a function of number of topics. Which is the best model? Do you notice any qualitative difference in the topics as $K$ increases? Comment on your overall findings
+I evaluate the test set perplexity for a range of models, fit with $K = 10,20,...,200$ topics. A plot of test set perplexity as a
+function of number of topics is provided below. 
 
 ```{r, message=FALSE, warning=FALSE, eval=FALSE}
 
@@ -218,4 +208,8 @@ for(i in 1:20) {
 plot(perplexity.plot)
 ```
 
-From this graph, the larger the number of topics, the lower the perplexity (and hence the better). As the magnitude of the gradient of this graph decreases with the topic_number, while increasing topic_number is beneficial, it also makes computation intensive. While no qualitative difference is evident, I expect that if topic_number was increased even further, we would see evidence of overfitting (perplexity increasing with topic_number), as while we are decreasing bias by increasing topic_number, we are also increasing variance of the model.
+From this graph, it appears the larger the number of topics, the lower the perplexity (and hence the better). As the magnitude of the
+gradient of this graph decreases with the topic_number, while increasing topic_number is beneficial, it also makes computation more
+intensive. While no qualitative difference is evident, I expect that if topic_number was increased even further, we would see evidence 
+of overfitting (perplexity increasing with topic_number), as while we are decreasing bias by increasing topic_number, we are also
+increasing variance of the model.
